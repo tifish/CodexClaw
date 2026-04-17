@@ -67,7 +67,7 @@ test("resolveCommandPath finds a binary from PATH", () => {
   const resolved = resolveCommandPath("node", process.env);
 
   assert.ok(resolved);
-  assert.match(resolved, /node$/);
+  assert.match(path.basename(resolved).toLowerCase(), /^node(?:\.exe)?$/);
 });
 
 test("runHealthcheck passes for a valid local config", async () => {

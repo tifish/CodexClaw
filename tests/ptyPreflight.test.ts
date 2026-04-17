@@ -3,9 +3,17 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ensureExecutablePermissions } from "../src/runner/ptyPreflight.js";
+import {
+  ensureExecutablePermissions,
+  repairNodePtySpawnHelperPermissions,
+  requiresNodePtySpawnHelper
+} from "../src/runner/ptyPreflight.js";
 
 test("ensureExecutablePermissions adds execute bits when missing", () => {
+  if (process.platform === "win32") {
+    return;
+  }
+
   const tempDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "claws-pty-preflight-")
   );
@@ -21,6 +29,10 @@ test("ensureExecutablePermissions adds execute bits when missing", () => {
 });
 
 test("ensureExecutablePermissions keeps executable files unchanged", () => {
+  if (process.platform === "win32") {
+    return;
+  }
+
   const tempDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "claws-pty-preflight-")
   );
@@ -33,4 +45,15 @@ test("ensureExecutablePermissions keeps executable files unchanged", () => {
   assert.equal(result.changed, false);
   assert.equal(result.executable, true);
   assert.equal(mode, 0o755);
+});
+
+test("node-pty spawn helper preflight is skipped on Windows", () => {
+  assert.equal(requiresNodePtySpawnHelper("win32"), false);
+  assert.equal(requiresNodePtySpawnHelper("linux"), true);
+
+  const result = repairNodePtySpawnHelperPermissions("win32");
+
+  assert.equal(result.changed, false);
+  assert.equal(result.executable, true);
+  assert.equal(result.path, "Not required on win32");
 });

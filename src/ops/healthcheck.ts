@@ -61,11 +61,33 @@ function makeCheck(
 
 function isPathExecutable(filePath: string): boolean {
   try {
-    fs.accessSync(filePath, fs.constants.X_OK);
+    fs.accessSync(
+      filePath,
+      process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK
+    );
     return true;
   } catch {
     return false;
   }
+}
+
+function resolveWindowsCommandCandidates(
+  segment: string,
+  raw: string,
+  env: NodeJS.ProcessEnv
+): string[] {
+  const candidate = path.join(segment, raw);
+  const ext = path.extname(raw);
+  if (ext) {
+    return [candidate];
+  }
+
+  const pathext = String(env.PATHEXT || ".COM;.EXE;.BAT;.CMD")
+    .split(";")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return [candidate, ...pathext.map((suffix) => `${candidate}${suffix}`)];
 }
 
 export function resolveCommandPath(
@@ -82,9 +104,15 @@ export function resolveCommandPath(
 
   const pathValue = String(env.PATH || "");
   for (const segment of pathValue.split(path.delimiter).filter(Boolean)) {
-    const candidate = path.join(segment, raw);
-    if (isPathExecutable(candidate)) {
-      return candidate;
+    const candidates =
+      process.platform === "win32"
+        ? resolveWindowsCommandCandidates(segment, raw, env)
+        : [path.join(segment, raw)];
+
+    for (const candidate of candidates) {
+      if (isPathExecutable(candidate)) {
+        return candidate;
+      }
     }
   }
 

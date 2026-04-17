@@ -15,6 +15,7 @@ import { ShellManager } from "./runner/shellManager.js";
 import { DevServerManager } from "./runner/devServerManager.js";
 import { Scheduler } from "./cron/scheduler.js";
 import { toErrorMessage } from "./lib/errors.js";
+import { formatStartupError } from "./lib/startup.js";
 import { createTelegramApiAgent } from "./lib/telegramApi.js";
 
 const config = loadConfig();
@@ -133,8 +134,17 @@ bot.catch(async (error: unknown, ctx: any) => {
   await ctx.reply(`Bot error: ${message}`).catch(() => {});
 });
 
-await bot.launch();
-console.log("CodexClaw started.");
+try {
+  await bot.launch();
+  console.log("CodexClaw started.");
+} catch (error: unknown) {
+  console.error(`[bot] startup failed: ${formatStartupError(error)}`);
+  scheduler.stop();
+  await ptyManager?.shutdown().catch(() => {});
+  await devServerManager.shutdown().catch(() => {});
+  await mcpClient?.closeAll().catch(() => {});
+  process.exit(1);
+}
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`Shutting down by ${signal}...`);
@@ -142,7 +152,11 @@ async function shutdown(signal: string): Promise<void> {
   await ptyManager?.shutdown();
   await devServerManager.shutdown();
   await mcpClient?.closeAll();
-  bot.stop(signal);
+  try {
+    bot.stop(signal);
+  } catch {
+    // Startup may fail before polling begins, in which case there is nothing to stop.
+  }
   process.exit(0);
 }
 

@@ -20,6 +20,12 @@ interface NodePtyUtilsModule {
   loadNativeModule(name: string): NativePtyModule;
 }
 
+export function requiresNodePtySpawnHelper(
+  platform: NodeJS.Platform = process.platform
+): boolean {
+  return platform !== "win32";
+}
+
 export function ensureExecutablePermissions(
   filePath: string
 ): ExecutablePermissionResult {
@@ -42,7 +48,13 @@ export function ensureExecutablePermissions(
   };
 }
 
-export function resolveNodePtySpawnHelperPath(): string {
+export function resolveNodePtySpawnHelperPath(
+  platform: NodeJS.Platform = process.platform
+): string {
+  if (!requiresNodePtySpawnHelper(platform)) {
+    return "";
+  }
+
   const require = createRequire(import.meta.url);
   const unixTerminalPath = require.resolve("node-pty/lib/unixTerminal.js");
   const unixTerminalDir = path.dirname(unixTerminalPath);
@@ -52,9 +64,19 @@ export function resolveNodePtySpawnHelperPath(): string {
   return path.resolve(unixTerminalDir, native.dir, "spawn-helper");
 }
 
-export function repairNodePtySpawnHelperPermissions(): ExecutablePermissionResult {
+export function repairNodePtySpawnHelperPermissions(
+  platform: NodeJS.Platform = process.platform
+): ExecutablePermissionResult {
+  if (!requiresNodePtySpawnHelper(platform)) {
+    return {
+      path: `Not required on ${platform}`,
+      changed: false,
+      executable: true
+    };
+  }
+
   try {
-    const helperPath = resolveNodePtySpawnHelperPath();
+    const helperPath = resolveNodePtySpawnHelperPath(platform);
     return ensureExecutablePermissions(helperPath);
   } catch (error: unknown) {
     return {

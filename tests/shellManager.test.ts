@@ -117,13 +117,13 @@ test("shell manager allows confirmed dangerous commands when writable", () => {
 
 test("shell manager executes an allowed command without invoking a shell", async () => {
   const manager = createShellManager({
-    allowedCommands: ["pwd"]
+    allowedCommands: ["node -p process.cwd()"]
   });
   const workdir = path.join(os.tmpdir());
 
   const result = await manager.execute({
     chatId: 1,
-    rawCommand: "pwd",
+    rawCommand: "node -p process.cwd()",
     workdir
   });
 
