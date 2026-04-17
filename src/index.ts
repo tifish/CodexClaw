@@ -33,6 +33,7 @@ const stateStore = new RuntimeStateStore({ config });
 let mcpClient: McpClient | null = null;
 let skillRegistry: SkillRegistry | null = null;
 let ptyManager: PtyManager | null = null;
+let shuttingDown = false;
 
 async function saveRuntimeState(): Promise<void> {
   if (!mcpClient || !skillRegistry || !ptyManager) return;
@@ -134,19 +135,12 @@ bot.catch(async (error: unknown, ctx: any) => {
   await ctx.reply(`Bot error: ${message}`).catch(() => {});
 });
 
-try {
-  await bot.launch();
-  console.log("CodexClaw started.");
-} catch (error: unknown) {
-  console.error(`[bot] startup failed: ${formatStartupError(error)}`);
-  scheduler.stop();
-  await ptyManager?.shutdown().catch(() => {});
-  await devServerManager.shutdown().catch(() => {});
-  await mcpClient?.closeAll().catch(() => {});
-  process.exit(1);
-}
-
 async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
   console.log(`Shutting down by ${signal}...`);
   scheduler.stop();
   await ptyManager?.shutdown();
@@ -162,3 +156,16 @@ async function shutdown(signal: string): Promise<void> {
 
 process.once("SIGINT", () => void shutdown("SIGINT"));
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
+
+void bot
+  .launch({}, () => {
+    console.log("CodexClaw started.");
+  })
+  .catch(async (error: unknown) => {
+    console.error(`[bot] startup failed: ${formatStartupError(error)}`);
+    scheduler.stop();
+    await ptyManager?.shutdown().catch(() => {});
+    await devServerManager.shutdown().catch(() => {});
+    await mcpClient?.closeAll().catch(() => {});
+    process.exit(1);
+  });
