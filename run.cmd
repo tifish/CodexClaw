@@ -11,10 +11,10 @@ if errorlevel 1 (
 )
 
 if not exist "node_modules" (
-  echo Dependencies are missing. Running install.cmd...
-  call "%~dp0install.cmd"
+  echo Dependencies are missing. Running setup.cmd...
+  call "%~dp0setup.cmd"
   if errorlevel 1 (
-    echo [ERROR] install.cmd failed.
+    echo [ERROR] setup.cmd failed.
     exit /b 1
   )
 )
