@@ -15,6 +15,8 @@ $AppParameters = 'src\index.ts'
 $LogDir = Join-Path $RepoRoot 'logs'
 $StdoutLog = Join-Path $LogDir 'service.out.log'
 $StderrLog = Join-Path $LogDir 'service.err.log'
+$ServiceUsername = $env:CODEXCLAW_SERVICE_USERNAME
+$ServicePassword = $env:CODEXCLAW_SERVICE_PASSWORD
 
 function Fail {
   param([string]$Message)
@@ -147,6 +149,55 @@ function Ensure-ServiceExists {
   }
 }
 
+function Resolve-ServiceLogonConfiguration {
+  $username = [string]$ServiceUsername
+  $password = [string]$ServicePassword
+
+  if ([string]::IsNullOrWhiteSpace($username)) {
+    Write-Host 'Service logon account'
+    Write-Host '  Enter a Windows user account such as COMPUTERNAME\Username.'
+    $username = Read-Host 'Username'
+  }
+
+  if ([string]::IsNullOrWhiteSpace($username)) {
+    Fail 'A Windows user account is required for the service logon.'
+  }
+
+  $trimmedUsername = $username.Trim()
+  $builtInAccounts = @(
+    'LocalSystem',
+    'NT AUTHORITY\LocalService',
+    'NT AUTHORITY\NetworkService'
+  )
+
+  if ($builtInAccounts -contains $trimmedUsername) {
+    Fail 'Built-in service accounts are not supported here. Provide a regular Windows user account and password.'
+  }
+
+  if ([string]::IsNullOrWhiteSpace($password)) {
+    $securePassword = Read-Host 'Password' -AsSecureString
+    if ($null -eq $securePassword) {
+      Fail 'A password is required for the specified service account.'
+    }
+
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
+    try {
+      $password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    } finally {
+      [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
+  }
+
+  if ([string]::IsNullOrWhiteSpace($password)) {
+    Fail 'A password is required for the specified service account.'
+  }
+
+  return @{
+    Username = $trimmedUsername
+    Password = $password
+  }
+}
+
 function Invoke-Nssm {
   param(
     [string[]]$Arguments,
@@ -217,6 +268,21 @@ function Set-NssmParameter {
   Invoke-Nssm -Arguments @('set', $ServiceName, $Name, $Value) -ErrorMessage "Failed to set $Name for service `"$ServiceName`"."
 }
 
+function Set-ServiceLogonAccount {
+  param([hashtable]$CredentialConfig)
+
+  Invoke-Nssm -Arguments @(
+    'set',
+    $ServiceName,
+    'ObjectName',
+    [string]$CredentialConfig.Username,
+    [string]$CredentialConfig.Password
+  ) -ErrorMessage "Failed to set logon account for service `"$ServiceName`"."
+
+  Write-Host "Service logon account:"
+  Write-Host "  $($CredentialConfig.Username)"
+}
+
 function Start-ServiceInternal {
   if ((Get-ServiceStatus) -eq [System.ServiceProcess.ServiceControllerStatus]::Running) {
     Write-Section "Service `"$ServiceName`" is already running."
@@ -266,6 +332,7 @@ function Stop-ServiceInternal {
 
 function Install-Service {
   $nodeExe = Resolve-NodePath
+  $serviceCredential = Resolve-ServiceLogonConfiguration
   Ensure-AppEntry
   Ensure-LogDirectory
 
@@ -291,6 +358,8 @@ function Install-Service {
   foreach ($setting in $settings.GetEnumerator()) {
     Set-NssmParameter -Name $setting.Key -Value $setting.Value
   }
+
+  Set-ServiceLogonAccount -CredentialConfig $serviceCredential
 
   Start-ServiceInternal
 
